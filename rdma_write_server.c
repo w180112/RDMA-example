@@ -2,7 +2,7 @@
  * modified from http://www.digitalvampire.org/rdma-tutorial-2007/notes.pdf
  * 
  * build:
- * gcc -o server server.c -lrdmacm -libverbs
+ * gcc -o server rdma_write_server.c -lrdmacm -libverbs
  * 
  * usage: 
  * ./server 

@@ -2,10 +2,10 @@
  * modified from http://www.digitalvampire.org/rdma-tutorial-2007/notes.pdf
  * 
  * build:
- * gcc -o client client.c -lrdmacm -libverbs
+ * gcc -o client rdma_write_client.c -lrdmacm -libverbs
  * 
  * usage:
- * client <servername or ip> <val1> <val2>
+ * ./client <servername or ip> <val1> <val2>
  * 
  * connect to server, send two integers, and waits for server to send back the sum.
  */ 
@@ -23,12 +23,12 @@
 
 #include <rdma/rdma_cma.h>
 
-enum   { 
-        RESOLVE_TIMEOUT_MS = 5000, 
+enum { 
+    RESOLVE_TIMEOUT_MS = 5000, 
 }; 
 struct pdata { 
-        uint64_t	buf_va; 
-        uint32_t	buf_rkey;
+    uint64_t	buf_va; 
+    uint32_t	buf_rkey;
 };
 
 int main(int argc, char *argv[]) 
@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
      * in RoCEv2, all of the packets use port 4791,
      * port 20000 here indicates a higher level abstraction port
      */
-	n = getaddrinfo(argv[5], "20000", &hints, &res);
+	n = getaddrinfo(argv[1], "20000", &hints, &res);
 	if (n < 0)  
 		return 1;
 
@@ -191,8 +191,8 @@ int main(int argc, char *argv[])
 	if (ibv_post_recv(cm_id->qp,&recv_wr,&bad_recv_wr))
 		return 1;
 
-	buf[0] = strtoul(argv[6],NULL,0);
-	buf[1] = strtoul(argv[7],NULL,0);
+	buf[0] = strtoul(argv[2],NULL,0);
+	buf[1] = strtoul(argv[3],NULL,0);
 	buf[0] = htonl(buf[0]);
 	buf[1] = htonl(buf[1]);
 
@@ -242,6 +242,5 @@ int main(int argc, char *argv[])
 		return err;
 	}
 	rdma_destroy_event_channel(cm_channel);
-	rte_eal_mp_wait_lcore();
     return 0;
 }
