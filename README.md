@@ -12,16 +12,19 @@ RDMA capable NIC, Linux kernel > 3.10, libverbs and librdmacm.
 
 Git clone this repository at both client and server
 
-	# git clone https://github.com/w180112/RDMA-example.git
+    # git clone https://github.com/w180112/RDMA-example.git
 
 Set iptables to make UDP port 4791 open
 
 On client side,
+
     # gcc -o client rdma_write_client.c -lrdmacm -libverbs
     # ./client <servername or ip> <val1> <val2>
 e.g.
+
     # ./client 192.168.0.168 123 456
 
 On server side,
+
     # gcc -o server rdma_write_server.c -lrdmacm -libverbs
     # ./server
