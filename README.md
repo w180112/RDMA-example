@@ -28,3 +28,8 @@ On server side,
 
     # gcc -o server rdma_write_server.c -lrdmacm -libverbs
     # ./server
+
+## Test environment
+
+1. Mellanox Connectx-4 Lx with SRIOV enable
+2. AMD R7-2700 + 64GB RAM
