@@ -10,6 +10,7 @@
  * waits for client to connect, receives two integers, and sends their sum back to the client.  
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <arpa/inet.h>
@@ -163,7 +164,7 @@ int main(int argc, char *argv[])
 	        perror("rdma cm create qp error");
             return err;
 	    }
-        rep_pdata.buf_va = htonl((uintptr_t)buf); 
+        rep_pdata.buf_va = htonll((uintptr_t)buf); 
         /* we need to prepare remote key to give to client */
         rep_pdata.buf_rkey = htonl(mr->rkey); 
 	    conn_param.responder_resources = 1;  
