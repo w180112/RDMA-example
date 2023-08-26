@@ -6,7 +6,7 @@ Send 2 numbers to server then send back the sum
 
 ## System required:
 
-RDMA capable NIC, Linux kernel > 3.10, libverbs and librdmacm.
+RDMA capable NIC, OFED driver with libverbs and librdmacm.
 
 ## How to use:
 
@@ -32,4 +32,4 @@ On server side,
 ## Test environment
 
 1. Mellanox Connectx-4 Lx with SRIOV enable
-2. AMD R7-2700 + 64GB RAM
+2. Rocky Linux 9.2, with kernel 5.14.0-284.11.1.el9_2.x86_64
