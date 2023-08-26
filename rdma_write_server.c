@@ -15,7 +15,7 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 
-#include <infiniband/arch.h>
+#include <byteswap.h>
 #include <rdma/rdma_cma.h> 
 
 enum { 
@@ -26,6 +26,48 @@ struct pdata {
     uint64_t buf_va; 
     uint32_t buf_rkey; 
 };
+
+int prepare_recv_notify_before_using_rdma_write(struct rdma_cm_id *cm_id, struct ibv_pd *pd)
+{   
+    uint8_t *buf = calloc(1, sizeof(uint8_t));
+	struct ibv_mr *mr = ibv_reg_mr(pd, buf, sizeof(uint8_t), IBV_ACCESS_LOCAL_WRITE); 
+	if (!mr) 
+		return 1;
+    struct ibv_sge notify_sge = {
+        .addr = (uintptr_t)buf,
+        .length = sizeof(uint32_t),
+        .lkey = mr->lkey,
+    };
+    struct ibv_recv_wr notify_wr = {
+        .wr_id = 0,
+        .sg_list = &notify_sge,
+        .num_sge = 1,
+        .next = NULL,
+    };
+    struct ibv_recv_wr *bad_recv_wr;
+    if (ibv_post_recv(cm_id->qp,&notify_wr,&bad_recv_wr))
+		return 1;
+
+    return 0;
+}
+
+int check_notify_before_using_rdma_write(struct ibv_comp_channel *comp_chan, struct ibv_cq *cq)
+{
+    struct ibv_wc           wc;
+    struct ibv_cq           *evt_cq;
+    void                    *cq_context;
+	
+    if (ibv_get_cq_event(comp_chan,&evt_cq,&cq_context))
+		return 1;
+	if (ibv_req_notify_cq(cq,0))
+		return 1;
+	if (ibv_poll_cq(cq,1,&wc) != 1)
+		return 1;
+	if (wc.status != IBV_WC_SUCCESS)
+		return 1;
+
+    return 0;
+}
 
 int main(int argc, char *argv[]) 
 { 
@@ -39,15 +81,13 @@ int main(int argc, char *argv[])
 
     struct ibv_pd               *pd; 
     struct ibv_comp_channel     *comp_chan; 
-    struct ibv_cq               *cq;  
+    struct ibv_cq               *cq;
     struct ibv_cq               *evt_cq;
     struct ibv_mr               *mr; 
     struct ibv_qp_init_attr     qp_attr = { };
     struct ibv_sge              sge; 
     struct ibv_send_wr          send_wr = { };
     struct ibv_send_wr          *bad_send_wr; 
-    struct ibv_recv_wr          recv_wr = { };
-    struct ibv_recv_wr          *bad_recv_wr;
     struct ibv_wc               wc;
     void                        *cq_context;
     struct sockaddr_in          sin;
@@ -164,7 +204,7 @@ int main(int argc, char *argv[])
 	        perror("rdma cm create qp error");
             return err;
 	    }
-        rep_pdata.buf_va = htonll((uintptr_t)buf); 
+        rep_pdata.buf_va = bswap_64((uintptr_t)buf); 
         /* we need to prepare remote key to give to client */
         rep_pdata.buf_rkey = htonl(mr->rkey); 
 	    conn_param.responder_resources = 1;  
@@ -184,6 +224,13 @@ int main(int argc, char *argv[])
             return 1;
         rdma_ack_cm_event(event);
 
+        /* we need to check IBV_WR_RDMA_WRITE is done, so we post_recv at first */
+        if (prepare_recv_notify_before_using_rdma_write(cm_id, pd))
+            return 1;
+        /* we need to check we already receive RDMA_WRITE done notification */
+        if (check_notify_before_using_rdma_write(comp_chan, cq))
+            return 1;
+
         /* Add two integers and send reply back */
 	    printf("client write %d and %d\n", ntohl(buf[0]), ntohl(buf[1]));
         buf[0] = htonl(ntohl(buf[0]) + ntohl(buf[1]));
@@ -196,7 +243,7 @@ int main(int argc, char *argv[])
         send_wr.opcode = IBV_WR_SEND;
         send_wr.send_flags = IBV_SEND_SIGNALED;
         send_wr.sg_list = &sge;
-        send_wr.num_sge = 1 ;
+        send_wr.num_sge = 1;
 
         if (ibv_post_send(cm_id->qp,&send_wr,&bad_send_wr)) 
             return 1;

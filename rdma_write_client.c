@@ -20,7 +20,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
-
+#include <byteswap.h>
 #include <rdma/rdma_cma.h>
 
 enum { 
@@ -30,6 +30,33 @@ struct pdata {
     uint64_t	buf_va; 
     uint32_t	buf_rkey;
 };
+
+int prepare_send_notify_after_rdma_write(struct rdma_cm_id *cm_id, struct ibv_pd *pd)
+{
+	struct ibv_sge					sge; 
+   	struct ibv_send_wr				send_wr = { }; 
+   	struct ibv_send_wr 				*bad_send_wr; 
+
+	uint8_t *buf = calloc(1, sizeof(uint8_t));
+	struct ibv_mr *mr = ibv_reg_mr(pd, buf, sizeof(uint8_t), IBV_ACCESS_LOCAL_WRITE); 
+	if (!mr) 
+		return 1;
+	
+	sge.addr = (uintptr_t)buf; 
+    sge.length = sizeof(uint8_t); 
+    sge.lkey = mr->lkey;
+    
+	memset(&send_wr, 0, sizeof(send_wr));
+	send_wr.wr_id = 2;
+    send_wr.opcode = IBV_WR_SEND;
+    send_wr.sg_list = &sge;
+    send_wr.num_sge = 1;
+
+    if (ibv_post_send(cm_id->qp,&send_wr,&bad_send_wr)) 
+        return 1;
+
+	return 0;
+}
 
 int main(int argc, char *argv[]) 
 {
@@ -207,12 +234,13 @@ int main(int argc, char *argv[])
 	send_wr.sg_list               = &sge;
 	send_wr.num_sge               = 1;
 	send_wr.wr.rdma.rkey          = ntohl(server_pdata.buf_rkey);
-	send_wr.wr.rdma.remote_addr   = ntohll(server_pdata.buf_va);
+	send_wr.wr.rdma.remote_addr   = bswap_64(server_pdata.buf_va);
 
 	if (ibv_post_send(cm_id->qp,&send_wr,&bad_send_wr))
 		return 1;
 
-	while (1) {
+	int end_loop = 0;
+	while (!end_loop) {
 		if (ibv_get_cq_event(comp_chan,&evt_cq,&cq_context))
 			return 1;
 		if (ibv_req_notify_cq(cq,0))
@@ -221,8 +249,20 @@ int main(int argc, char *argv[])
 			return 1;
 		if (wc.status != IBV_WC_SUCCESS)
 			return 1;
-		if (wc.wr_id == 0) {
+		switch (wc.wr_id) {
+		case 0:
 			printf("server ans : %d\n", ntohl(buf[0]));
+			end_loop = 1;
+			break;
+		case 1:
+			/* due to server side doesn't know when the IBV_WR_RDMA_WRITE is done,
+			 * we need to send a notification to tell server side the IBV_WR_RDMA_WRITE is alreay sent 
+			 */
+			if (prepare_send_notify_after_rdma_write(cm_id, pd))
+				return 1;
+			break;
+		default:
+			end_loop = 1;
 			break;
 		}
     }
